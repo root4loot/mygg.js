@@ -1,26 +1,12 @@
 /* --------- Info --------- */
 
-//  mygg.js v0.4.0
+//  mygg.js v0.4.1
 //  Author: Daniel Solstad (https://github.com/dsolstad/mygg.js)
 //  Forked by: Daniel Antonsen (https://github.com/root4loot/mygg.js)
 
-/* --------- Configuration --------- */
-
-const config = {
-    domain: process.env.DOMAIN || 'attacker.example.com',
-    https_interface: '0.0.0.0',
-    https_port: 8443,
-    polling_time: 2000,
-    key: './key.pem',
-    cert: './cert.pem',
-    debug: 0,
-    proxy_interface: '0.0.0.0',
-    proxy_port: 8081,
-    proxy_allowed_ips: ['127.0.0.1'],
-}
-
 /* --------- Requires --------- */
 
+const config = require('./config');
 const https = require('https');
 const http = require('http');
 const proxy = require('http');

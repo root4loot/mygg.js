@@ -1,3 +1,5 @@
+const config = require('./config');
+
 function makeRequest(id, method, url, head, body) {
     /* Forcing the hooked browser to perform the request. */
     var target_http = new XMLHttpRequest();
