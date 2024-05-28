@@ -53,7 +53,7 @@ function getPath(url) {
 }
 
 function getPort() {
-    var ports = {'http': 80, 'https': 8443};
+    const ports = { 'http': 80, 'https': config.https_port };
     return ports[location.protocol.slice(0, -1)];
 }
 
